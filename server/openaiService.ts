@@ -26,8 +26,116 @@ export interface StreamCallbacks {
   onError: (err: Error) => void;
 }
 
+export interface SyncedConversationItem {
+  id: string;
+  type: 'user_message' | 'assistant_message';
+  conversationId: string;
+  timestamp: string;
+  content: string;
+}
+
+/**
+ * Creates a genuine persistent conversation on OpenAI's platform via the SDK.
+ */
+export async function createRealOpenAIConversation(): Promise<string> {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error('OPENAI_API_KEY is not configured. Add your key to .env to create a real OpenAI conversation.');
+  }
+  const conv = await client.conversations.create();
+  return conv.id;
+}
+
+/**
+ * Retrieves an existing conversation from OpenAI via the SDK.
+ */
+export async function retrieveOpenAIConversation(conversationId: string) {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error('OPENAI_API_KEY is not configured in .env.');
+  }
+  return await client.conversations.retrieve(conversationId);
+}
+
+/**
+ * Fetches earlier conversation history directly from OpenAI's servers using the Conversations API.
+ * This reads genuine user and assistant turns stored under the persistent conversation ID.
+ */
+export async function fetchEarlierConversationFromOpenAI(
+  conversationId: string
+): Promise<SyncedConversationItem[]> {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error(
+      'OPENAI_API_KEY is not configured. Set your OpenAI API key in .env to stream and fetch genuine earlier conversations without dummy data.'
+    );
+  }
+
+  try {
+    const itemsPage = await client.conversations.items.list(conversationId);
+    const items: SyncedConversationItem[] = [];
+
+    for await (const rawItem of itemsPage) {
+      const item = rawItem as any;
+      const role = item.role || (item.type === 'message' ? item.role : undefined);
+
+      let contentText = '';
+      if (typeof item.content === 'string') {
+        contentText = item.content;
+      } else if (Array.isArray(item.content)) {
+        contentText = item.content
+          .map((part: any) => {
+            if (typeof part === 'string') return part;
+            if (part?.text) return part.text;
+            if (part?.input_text) return part.input_text;
+            if (part?.output_text) return part.output_text;
+            return '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      }
+
+      if (!contentText && !role) {
+        continue;
+      }
+
+      const timestamp = item.created_at
+        ? typeof item.created_at === 'number'
+          ? new Date(item.created_at * 1000).toISOString()
+          : new Date(item.created_at).toISOString()
+        : new Date().toISOString();
+
+      if (role === 'user') {
+        items.push({
+          id: item.id || `evt_usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          type: 'user_message',
+          conversationId,
+          timestamp,
+          content: contentText || '(User message)',
+        });
+      } else if (role === 'assistant') {
+        items.push({
+          id: item.id || `evt_asst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          type: 'assistant_message',
+          conversationId,
+          timestamp,
+          content: contentText || '(Assistant response)',
+        });
+      }
+    }
+
+    // Sort chronologically (oldest first)
+    items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return items;
+  } catch (err: any) {
+    console.error('[OpenAI Sync Error]:', err?.message || err);
+    throw new Error(`Failed to fetch earlier conversation from OpenAI: ${err?.message || 'Unknown error'}`);
+  }
+}
+
 /**
  * Streams a user query to the OpenAI persistent conversation using the Responses API.
+ * Uses persistent conversation context on OpenAI's servers with zero dummy data.
  */
 export async function streamConversationResponse(
   conversationId: string,
@@ -38,8 +146,9 @@ export async function streamConversationResponse(
   const model = getModelName();
 
   if (!client) {
-    console.log('[OpenAI] No OPENAI_API_KEY configured. Running in high-fidelity preview mode.');
-    await simulateStreamingResponse(userMessage, callbacks);
+    const errorMsg =
+      'OPENAI_API_KEY is not configured in .env. Please set your genuine OpenAI API key to stream live ChatGPT responses without dummy data.';
+    callbacks.onError(new Error(errorMsg));
     return;
   }
 
@@ -73,28 +182,16 @@ export async function streamConversationResponse(
       }
     }
 
-    if (!fullText) {
-      fullText = 'The analysis is complete. No additional desktop changes detected.';
-      callbacks.onDelta(fullText);
-    }
-
     callbacks.onComplete(fullText);
   } catch (err: any) {
-    console.error('[OpenAI Responses API Error]:', err?.message || err);
-    // User-friendly error message without leaking sensitive keys
-    const userSafeError = new Error(
-      err?.status === 401
-        ? 'OpenAI authentication failed. Please verify your OPENAI_API_KEY.'
-        : err?.status === 429
-        ? 'OpenAI rate limit reached. Please wait a moment before trying again.'
-        : `OpenAI Responses service error: ${err?.message || 'Unable to complete request'}`
-    );
-    callbacks.onError(userSafeError);
+    console.error('[OpenAI Stream Error]:', err?.message || err);
+    callbacks.onError(new Error(`OpenAI API error: ${err?.message || 'Failed to stream response'}`));
   }
 }
 
 /**
- * Analyzes a screenshot within the persistent OpenAI conversation.
+ * Feeds a newly captured screenshot into the persistent OpenAI conversation
+ * using the Responses API with multimodal input.
  */
 export async function analyzeScreenshotWithOpenAI(
   conversationId: string,
@@ -105,8 +202,9 @@ export async function analyzeScreenshotWithOpenAI(
   const model = getModelName();
 
   if (!client) {
-    console.log('[OpenAI] No OPENAI_API_KEY configured for screenshot analysis. Running preview simulation.');
-    await simulateScreenshotAnalysis(screenshotPath, callbacks);
+    const errorMsg =
+      'OPENAI_API_KEY is not configured in .env. Please set your genuine OpenAI API key to analyze screenshots without dummy data.';
+    callbacks.onError(new Error(errorMsg));
     return;
   }
 
@@ -164,81 +262,9 @@ export async function analyzeScreenshotWithOpenAI(
       }
     }
 
-    if (!fullText) {
-      fullText = 'Desktop observed. Workspace active.';
-      callbacks.onDelta(fullText);
-    }
-
     callbacks.onComplete(fullText);
   } catch (err: any) {
     console.error('[OpenAI Screenshot Analysis Error]:', err?.message || err);
     callbacks.onError(new Error(`Screenshot analysis error: ${err?.message || 'Failed to process screenshot'}`));
   }
-}
-
-/**
- * High-fidelity realistic preview simulation when OPENAI_API_KEY is not set.
- * Streams in real time with natural token pacing.
- */
-async function simulateStreamingResponse(query: string, callbacks: StreamCallbacks): Promise<void> {
-  const lower = query.toLowerCase();
-  let text = '';
-
-  if (lower.includes('what') && lower.includes('doing')) {
-    text =
-      'The user is currently focused on developing a Node.js full-stack interface. ' +
-      'They have Visual Studio Code open on the main display editing backend API endpoints, ' +
-      'with an active terminal running live diagnostics and file watcher processes.';
-  } else if (lower.includes('change') || lower.includes('different')) {
-    text =
-      'Comparing with the previous screenshot, the user transitioned from the code editor to the terminal window. ' +
-      'They executed `npm run build` which compiled the production assets with zero errors, and staged two files in git.';
-  } else if (lower.includes('application') || lower.includes('app')) {
-    text =
-      'Active applications detected on screen: Visual Studio Code (primary editor), ' +
-      'Zsh Terminal (compilation & git tasks), and Google Chrome (testing API endpoints and previewing Vue components).';
-  } else {
-    text = `Regarding "${query}": The live desktop feed indicates steady development activity. The user is actively interacting with the workspace, maintaining code and testing server endpoints.`;
-  }
-
-  // Stream in realistic token chunks
-  const words = text.split(' ');
-  let accumulated = '';
-  for (let i = 0; i < words.length; i++) {
-    const chunk = (i === 0 ? '' : ' ') + words[i];
-    accumulated += chunk;
-    callbacks.onDelta(chunk);
-    await new Promise((resolve) => setTimeout(resolve, 35));
-  }
-  callbacks.onComplete(accumulated);
-}
-
-async function simulateScreenshotAnalysis(screenshotPath: string, callbacks: StreamCallbacks): Promise<void> {
-  const filename = path.basename(screenshotPath);
-  let text = '';
-
-  if (filename.includes('001') || filename.includes('vscode')) {
-    text =
-      'The user is currently active in Visual Studio Code on a dark theme. ' +
-      'They are editing Express backend routes in `server.ts` and configuring real-time event streaming. ' +
-      'The project file explorer is visible on the left and no syntax errors are indicated.';
-  } else if (filename.includes('002') || filename.includes('terminal')) {
-    text =
-      'The user has focused on a terminal workspace. They executed `npm run build` and `tsc --noEmit`. ' +
-      'All unit checks passed successfully and the development server is bound to port 3000.';
-  } else {
-    text =
-      'The user has opened a web browser side-by-side with their editor. ' +
-      'They are reviewing application logs, inspecting WebSocket/SSE connection states, and verifying the real-time event stream.';
-  }
-
-  const words = text.split(' ');
-  let accumulated = '';
-  for (let i = 0; i < words.length; i++) {
-    const chunk = (i === 0 ? '' : ' ') + words[i];
-    accumulated += chunk;
-    callbacks.onDelta(chunk);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  }
-  callbacks.onComplete(accumulated);
 }

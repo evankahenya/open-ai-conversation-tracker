@@ -22,20 +22,29 @@ const props = defineProps<{
   activeStreamingMessage?: any;
   isGenerating?: boolean;
   isCapturing?: boolean;
+  isSyncing?: boolean;
   errorMessage?: string | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'send-message', text: string): void;
   (e: 'trigger-capture'): void;
+  (e: 'sync-history'): void;
+  (e: 'clear-events'): void;
+  (e: 'update-conversation-id', newId: string): void;
   (e: 'reconnect'): void;
   (e: 'clear-error'): void;
 }>();
 
-const isMobileSidebarOpen = ref(false);
+// Sidebar state: open by default, can be toggled closed so the main screen occupies 100% full width
+const isSidebarOpen = ref(true);
 
 const toggleSidebar = () => {
-  isMobileSidebarOpen.value = !isMobileSidebarOpen.value;
+  isSidebarOpen.value = !isSidebarOpen.value;
+};
+
+const closeSidebar = () => {
+  isSidebarOpen.value = false;
 };
 
 // Modal image state
@@ -65,37 +74,50 @@ const closeImageViewer = () => {
 
 <template>
   <div id="chat-layout-root" class="flex h-screen w-screen bg-[#0f1117] text-slate-100 overflow-hidden font-sans">
-    <!-- Desktop & Mobile Sidebar -->
-    <!-- Mobile Backdrop -->
+    <!-- Mobile Backdrop (only when open on mobile) -->
     <div
-      v-if="isMobileSidebarOpen"
+      v-if="isSidebarOpen"
       class="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden"
-      @click="isMobileSidebarOpen = false"
+      @click="closeSidebar"
     ></div>
 
-    <!-- Sidebar Container -->
+    <!-- Collapsible Sidebar Container -->
     <div
-      class="fixed inset-y-0 left-0 z-50 transform lg:relative lg:translate-x-0 transition-transform duration-200 ease-in-out flex"
-      :class="isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+      id="collapsible-sidebar-container"
+      class="fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out flex shrink-0 lg:relative"
+      :class="[
+        isSidebarOpen
+          ? 'w-64 sm:w-72 translate-x-0 opacity-100'
+          : 'w-0 max-w-0 -translate-x-full opacity-0 pointer-events-none overflow-hidden',
+      ]"
     >
       <ConversationSidebar
         :session-info="props.sessionInfo"
         :screenshot-count="props.screenshotCount"
         :is-capturing="props.isCapturing"
+        :is-syncing="props.isSyncing"
         @trigger-capture="emit('trigger-capture')"
+        @sync-history="emit('sync-history')"
+        @clear-events="emit('clear-events')"
+        @update-conversation-id="(id) => emit('update-conversation-id', id)"
+        @close-sidebar="closeSidebar"
       />
     </div>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[#0f1117]">
-      <!-- Header -->
+    <!-- Main Content Area: Takes 100% full width when sidebar is hidden -->
+    <main class="flex-1 flex flex-col min-w-0 w-full h-full overflow-hidden bg-[#0f1117] transition-all duration-300">
+      <!-- Minimal Header: Focused strictly on conversation thread -->
       <ChatHeader
         :connection-status="props.connectionStatus"
-        :current-activity="props.currentActivity"
         :is-capturing="props.isCapturing"
+        :is-sidebar-open="isSidebarOpen"
+        :conversation-id="props.sessionInfo?.conversationId"
+        :is-syncing="props.isSyncing"
         @toggle-sidebar="toggleSidebar"
         @reconnect="emit('reconnect')"
         @trigger-capture="emit('trigger-capture')"
+        @update-conversation-id="(id) => emit('update-conversation-id', id)"
+        @sync-history="emit('sync-history')"
       />
 
       <!-- Error Notification Banner if any -->
@@ -109,13 +131,13 @@ const closeImageViewer = () => {
         </div>
         <button
           @click="emit('clear-error')"
-          class="p-1 rounded text-rose-400 hover:text-white transition-colors"
+          class="p-1 rounded text-rose-400 hover:text-white transition-colors cursor-pointer"
         >
           <X class="w-4 h-4" />
         </button>
       </div>
 
-      <!-- Messages View -->
+      <!-- Messages View: The main focus of the application -->
       <ConversationView
         :messages="props.messages"
         :active-streaming-message="props.activeStreamingMessage"

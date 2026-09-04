@@ -34,11 +34,7 @@ function loadConversation(): ConversationData {
     status: 'monitoring',
     screenshotCount: 0,
     lastUpdate: new Date().toISOString(),
-    currentActivity: {
-      application: 'Visual Studio Code',
-      activity: 'Waiting for first screenshot capture...',
-      lastUpdate: new Date().toISOString(),
-    },
+    currentActivity: undefined,
   };
   saveConversation(initial);
   return initial;
@@ -144,4 +140,11 @@ export function setCurrentActivity(activity: {
     currentActivity: activity,
     lastUpdate: activity.lastUpdate,
   });
+}
+
+export function replaceEvents(newEvents: ConversationEvent[]): void {
+  saveEvents(newEvents);
+  if (newEvents.length > 0) {
+    updateConversation({ lastUpdate: newEvents[newEvents.length - 1].timestamp });
+  }
 }

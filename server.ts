@@ -5,12 +5,16 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { getConversation, getEvents, appendEvent } from './server/store';
+import { getConversation, getEvents, appendEvent, updateConversation, replaceEvents } from './server/store';
 import { realtimeHub } from './server/realtime';
 import { runInConversationLock } from './server/concurrency';
-import { streamConversationResponse } from './server/openaiService';
+import {
+  streamConversationResponse,
+  fetchEarlierConversationFromOpenAI,
+  createRealOpenAIConversation,
+} from './server/openaiService';
 import { startWatcher, triggerSampleCapture, getWatcherStatus } from './server/watcher';
-import { AssistantMessageEvent, UserMessageEvent } from './server/types';
+import { AssistantMessageEvent, UserMessageEvent, ConversationEvent } from './server/types';
 
 const PORT = 3000;
 const SCREENSHOTS_DIR = path.resolve(process.cwd(), 'data/screenshots');
@@ -53,6 +57,113 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ error: 'Failed to retrieve conversation events' });
+    }
+  });
+
+  // Fetch earlier conversation history directly from OpenAI using the SDK
+  app.post('/api/conversation/sync', async (req, res) => {
+    try {
+      const conv = getConversation();
+      const targetId = req.body?.conversationId || conv.conversationId;
+
+      console.log(`[Sync] Fetching earlier conversations from OpenAI for ${targetId}...`);
+      const syncedItems = await fetchEarlierConversationFromOpenAI(targetId);
+
+      // Map to ConversationEvent
+      const newEvents: ConversationEvent[] = syncedItems.map((item) => {
+        if (item.type === 'user_message') {
+          return {
+            id: item.id,
+            type: 'user_message',
+            conversationId: targetId,
+            timestamp: item.timestamp,
+            content: item.content,
+          } as UserMessageEvent;
+        } else {
+          return {
+            id: item.id,
+            type: 'assistant_message',
+            conversationId: targetId,
+            timestamp: item.timestamp,
+            content: item.content,
+          } as AssistantMessageEvent;
+        }
+      });
+
+      replaceEvents(newEvents);
+      updateConversation({ conversationId: targetId, lastUpdate: new Date().toISOString() });
+
+      // Notify all connected UI clients that history was synced
+      realtimeHub.broadcast({
+        id: `evt_sync_${Date.now()}`,
+        type: 'conversation_synced',
+        conversationId: targetId,
+        timestamp: new Date().toISOString(),
+        data: { count: newEvents.length },
+      });
+
+      res.json({
+        success: true,
+        conversationId: targetId,
+        count: newEvents.length,
+        events: newEvents,
+      });
+    } catch (err: any) {
+      console.error('[Sync Error]:', err.message);
+      res.status(500).json({ error: err.message || 'Failed to sync earlier conversation from OpenAI' });
+    }
+  });
+
+  // Switch or set conversation ID
+  app.post('/api/conversation/set-id', async (req, res) => {
+    try {
+      const { conversationId } = req.body;
+      if (!conversationId || typeof conversationId !== 'string' || conversationId.trim() === '') {
+        res.status(400).json({ error: 'Valid conversationId is required' });
+        return;
+      }
+      const trimmedId = conversationId.trim();
+      updateConversation({ conversationId: trimmedId, lastUpdate: new Date().toISOString() });
+
+      res.json({ success: true, conversationId: trimmedId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to update conversation ID' });
+    }
+  });
+
+  // Create a brand new real OpenAI conversation via SDK
+  app.post('/api/conversation/create', async (req, res) => {
+    try {
+      const newId = await createRealOpenAIConversation();
+      updateConversation({
+        conversationId: newId,
+        screenshotCount: 0,
+        currentActivity: undefined,
+        lastUpdate: new Date().toISOString(),
+      });
+      replaceEvents([]);
+
+      realtimeHub.broadcast({
+        id: `evt_newconv_${Date.now()}`,
+        type: 'conversation_created',
+        conversationId: newId,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({ success: true, conversationId: newId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to create OpenAI conversation' });
+    }
+  });
+
+  // Clear all events (no dummy data)
+  app.post('/api/conversation/clear', (req, res) => {
+    try {
+      replaceEvents([]);
+      updateConversation({ screenshotCount: 0, currentActivity: undefined });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Failed to clear events' });
     }
   });
 

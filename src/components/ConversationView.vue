@@ -53,13 +53,13 @@ onMounted(() => {
         v-if="props.messages.length === 0 && !props.activeStreamingMessage"
         class="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-3"
       >
-        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400">
+        <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 shadow-sm">
           <Monitor class="w-8 h-8 text-indigo-400" />
         </div>
-        <div class="max-w-sm">
-          <h3 class="text-sm font-semibold text-slate-300">Awaiting Screen Monitoring Activity</h3>
-          <p class="text-xs text-slate-500 mt-1">
-            The watcher is running in the background. Screenshots placed in <code class="text-slate-400 font-mono">data/watch/</code> or captured will appear here with live AI analysis.
+        <div class="max-w-md space-y-1.5">
+          <h3 class="text-sm font-semibold text-slate-200">Zero Dummy Data — Ready for Real OpenAI Conversation</h3>
+          <p class="text-xs text-slate-400">
+            No dummy or simulated events are loaded. You can click <span class="text-indigo-300 font-medium">Sync Earlier from OpenAI</span> in the sidebar to stream earlier conversation turns, or send a new question below to stream live with the OpenAI Responses API.
           </p>
         </div>
       </div>

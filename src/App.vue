@@ -11,6 +11,7 @@ const {
   screenshotCount,
   isGenerating,
   isCapturing,
+  isSyncing,
   activeStreamingMessage,
   error,
   loadInitialData,
@@ -18,6 +19,9 @@ const {
   handleRealtimeEvent,
   sendMessage,
   triggerCapture,
+  syncHistory,
+  clearEvents,
+  updateConvId,
 } = useConversation();
 
 const { connectionStatus, lastEventId, reconnectNow } = useRealtime(
@@ -45,9 +49,13 @@ onMounted(() => {
     :active-streaming-message="activeStreamingMessage"
     :is-generating="isGenerating"
     :is-capturing="isCapturing"
+    :is-syncing="isSyncing"
     :error-message="error"
     @send-message="sendMessage"
     @trigger-capture="triggerCapture"
+    @sync-history="syncHistory"
+    @clear-events="clearEvents"
+    @update-conversation-id="updateConvId"
     @reconnect="reconnectNow"
     @clear-error="error = null"
   />

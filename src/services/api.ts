@@ -114,3 +114,42 @@ export function sendUserMessageStream(
 
   return () => controller.abort();
 }
+
+export async function syncEarlierConversation(conversationId?: string): Promise<{
+  success: boolean;
+  conversationId: string;
+  count: number;
+  events: ConversationMessage[];
+}> {
+  const res = await fetch(`${API_BASE}/api/conversation/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversationId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to sync earlier conversation: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function clearConversationEvents(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/conversation/clear`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to clear events: ${res.statusText}`);
+  }
+}
+
+export async function setConversationId(conversationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/conversation/set-id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversationId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Failed to update conversation ID: ${res.statusText}`);
+  }
+}

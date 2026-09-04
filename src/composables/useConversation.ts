@@ -12,6 +12,9 @@ import {
   fetchMessages,
   sendUserMessageStream,
   triggerWatcherCapture,
+  syncEarlierConversation,
+  clearConversationEvents,
+  setConversationId,
 } from '../services/api';
 
 export function useConversation(onContentChange?: () => void) {
@@ -262,6 +265,43 @@ export function useConversation(onContentChange?: () => void) {
     }
   };
 
+  const isSyncing = ref(false);
+
+  const syncHistory = async (targetId?: string) => {
+    if (isSyncing.value) return;
+    isSyncing.value = true;
+    error.value = null;
+    try {
+      const res = await syncEarlierConversation(targetId);
+      messages.value = res.events;
+      await loadInitialData();
+    } catch (err: any) {
+      console.error('[Failed to sync earlier conversation]:', err);
+      error.value = err.message || 'Failed to sync earlier conversation from OpenAI';
+    } finally {
+      isSyncing.value = false;
+    }
+  };
+
+  const clearEvents = async () => {
+    try {
+      await clearConversationEvents();
+      messages.value = [];
+      await loadInitialData();
+    } catch (err: any) {
+      error.value = err.message || 'Failed to clear events';
+    }
+  };
+
+  const updateConvId = async (newId: string) => {
+    try {
+      await setConversationId(newId);
+      await syncHistory(newId);
+    } catch (err: any) {
+      error.value = err.message || 'Failed to update conversation ID';
+    }
+  };
+
   return {
     messages,
     conversationId,
@@ -270,6 +310,7 @@ export function useConversation(onContentChange?: () => void) {
     screenshotCount,
     isGenerating,
     isCapturing,
+    isSyncing,
     activeStreamingMessage,
     error,
     loadInitialData,
@@ -277,5 +318,8 @@ export function useConversation(onContentChange?: () => void) {
     handleRealtimeEvent,
     sendMessage,
     triggerCapture,
+    syncHistory,
+    clearEvents,
+    updateConvId,
   };
 }
