@@ -1,0 +1,6 @@
+{
+  "name": "Screen Monitor",
+  "description": "Real-time Vue interface for OpenAI screen-monitoring conversation with streaming AI responses, screenshot feed, and live activity tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
