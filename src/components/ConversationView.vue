@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import { ConversationMessage } from '../types';
 import ScreenshotMessage from './ScreenshotMessage.vue';
 import UserMessage from './UserMessage.vue';
@@ -26,9 +26,27 @@ const scrollContainerRef = ref<HTMLElement | null>(null);
 const { isUserScrolledUp, showScrollButton, unreadCount, scrollToBottom, notifyNewContent } =
   useAutoScroll(scrollContainerRef);
 
-// Watch for changes in message count or streaming content to trigger auto-scroll
+// Ensure messages are rendered strictly in chronological order:
+// Oldest messages appear at the top, and the most recent AI response appears at the bottom.
+const sortedMessages = computed(() => {
+  return [...props.messages].sort((a, b) => {
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    if (isNaN(timeA) || isNaN(timeB) || timeA === timeB) {
+      return 0;
+    }
+    return timeA - timeB;
+  });
+});
+
+// Watch for changes in message count, last message ID, or streaming content to trigger auto-scroll
 watch(
-  () => [props.messages.length, props.activeStreamingMessage?.content],
+  () => [
+    props.messages.length,
+    props.messages[props.messages.length - 1]?.id,
+    props.messages[props.messages.length - 1]?.content,
+    props.activeStreamingMessage?.content,
+  ],
   () => {
     notifyNewContent();
   },
@@ -37,6 +55,8 @@ watch(
 
 onMounted(() => {
   scrollToBottom(false);
+  setTimeout(() => scrollToBottom(false), 60);
+  setTimeout(() => scrollToBottom(false), 200);
 });
 </script>
 
@@ -50,7 +70,7 @@ onMounted(() => {
     >
       <!-- Empty State -->
       <div
-        v-if="props.messages.length === 0 && !props.activeStreamingMessage"
+        v-if="sortedMessages.length === 0 && !props.activeStreamingMessage"
         class="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-3"
       >
         <div class="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-slate-400 shadow-sm">
@@ -59,13 +79,13 @@ onMounted(() => {
         <div class="max-w-md space-y-1.5">
           <h3 class="text-sm font-semibold text-slate-200">Zero Dummy Data — Ready for Real OpenAI Conversation</h3>
           <p class="text-xs text-slate-400">
-            No dummy or simulated events are loaded. You can click <span class="text-indigo-300 font-medium">Sync Earlier from OpenAI</span> in the sidebar to stream earlier conversation turns, or send a new question below to stream live with the OpenAI Responses API.
+            No dummy or simulated events are loaded. Auto-sync is active in the background. You can also send a new question below to stream live with the OpenAI Responses API.
           </p>
         </div>
       </div>
 
-      <!-- Messages Stream -->
-      <template v-for="msg in props.messages" :key="msg.id">
+      <!-- Messages Stream (Oldest at top, most recent at bottom) -->
+      <template v-for="msg in sortedMessages" :key="msg.id">
         <!-- Screenshot Analysis Event -->
         <ScreenshotMessage
           v-if="msg.type === 'screenshot_analysis'"

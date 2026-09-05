@@ -29,6 +29,19 @@ export function useAutoScroll(containerRef: Ref<HTMLElement | null>) {
       showScrollButton.value = false;
       unreadCount.value = 0;
     });
+
+    // Secondary delayed check to handle image or markdown reflows
+    setTimeout(() => {
+      const el = containerRef.value;
+      if (!el || isUserScrolledUp.value) return;
+      el.scrollTop = el.scrollHeight;
+    }, 60);
+
+    setTimeout(() => {
+      const el = containerRef.value;
+      if (!el || isUserScrolledUp.value) return;
+      el.scrollTop = el.scrollHeight;
+    }, 180);
   };
 
   const notifyNewContent = () => {

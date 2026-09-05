@@ -60,6 +60,7 @@ export async function retrieveOpenAIConversation(conversationId: string) {
 /**
  * Fetches earlier conversation history directly from OpenAI's servers using the Conversations API.
  * This reads genuine user and assistant turns stored under the persistent conversation ID.
+ * Returns items strictly sorted in chronological order (oldest first, newest at the bottom).
  */
 export async function fetchEarlierConversationFromOpenAI(
   conversationId: string
@@ -73,10 +74,22 @@ export async function fetchEarlierConversationFromOpenAI(
 
   try {
     const itemsPage = await client.conversations.items.list(conversationId);
-    const items: SyncedConversationItem[] = [];
+    const rawItems: any[] = [];
 
     for await (const rawItem of itemsPage) {
-      const item = rawItem as any;
+      rawItems.push(rawItem);
+    }
+
+    // OpenAI Conversations API returns items in reverse-chronological order (newest first).
+    // In chat applications, the thread must display chronologically (oldest at the top, newest/most recent at the bottom).
+    // Therefore, we reverse rawItems so the order is [oldest, ..., newest].
+    rawItems.reverse();
+
+    const items: SyncedConversationItem[] = [];
+    const baseTime = Date.now() - rawItems.length * 2000;
+
+    for (let i = 0; i < rawItems.length; i++) {
+      const item = rawItems[i];
       const role = item.role || (item.type === 'message' ? item.role : undefined);
 
       let contentText = '';
@@ -99,15 +112,20 @@ export async function fetchEarlierConversationFromOpenAI(
         continue;
       }
 
+      // Parse timestamp or assign progressive timestamp so order is guaranteed
       const timestamp = item.created_at
         ? typeof item.created_at === 'number'
           ? new Date(item.created_at * 1000).toISOString()
           : new Date(item.created_at).toISOString()
-        : new Date().toISOString();
+        : item.created
+        ? typeof item.created === 'number'
+          ? new Date(item.created * 1000).toISOString()
+          : new Date(item.created).toISOString()
+        : new Date(baseTime + i * 2000).toISOString();
 
       if (role === 'user') {
         items.push({
-          id: item.id || `evt_usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          id: item.id || `evt_usr_${Date.now()}_${i}`,
           type: 'user_message',
           conversationId,
           timestamp,
@@ -115,7 +133,7 @@ export async function fetchEarlierConversationFromOpenAI(
         });
       } else if (role === 'assistant') {
         items.push({
-          id: item.id || `evt_asst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          id: item.id || `evt_asst_${Date.now()}_${i}`,
           type: 'assistant_message',
           conversationId,
           timestamp,
@@ -124,12 +142,37 @@ export async function fetchEarlierConversationFromOpenAI(
       }
     }
 
-    // Sort chronologically (oldest first)
+    // Strictly sort chronologically: oldest first, so newest response is always at the bottom
     items.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return items;
   } catch (err: any) {
     console.error('[OpenAI Sync Error]:', err?.message || err);
     throw new Error(`Failed to fetch earlier conversation from OpenAI: ${err?.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Checks if OpenAI has newer items that haven't been stored locally yet.
+ */
+export async function checkNewOpenAIItems(
+  conversationId: string,
+  knownItemIds: Set<string>
+): Promise<{ hasNew: boolean; newCount: number }> {
+  const client = getOpenAIClient();
+  if (!client) return { hasNew: false, newCount: 0 };
+
+  try {
+    const itemsPage = await client.conversations.items.list(conversationId, { limit: 10 });
+    let newCount = 0;
+    for await (const rawItem of itemsPage) {
+      const item = rawItem as any;
+      if (item?.id && !knownItemIds.has(item.id)) {
+        newCount++;
+      }
+    }
+    return { hasNew: newCount > 0, newCount };
+  } catch {
+    return { hasNew: false, newCount: 0 };
   }
 }
 

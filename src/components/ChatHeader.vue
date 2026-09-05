@@ -95,11 +95,20 @@ const applyConvId = () => {
             @click="emit('sync-history')"
             :disabled="props.isSyncing"
             class="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-indigo-300 transition-colors cursor-pointer disabled:opacity-50"
-            title="Sync earlier messages from OpenAI"
+            title="Manually force sync messages from OpenAI (auto-sync is also active in background)"
           >
             <Loader2 v-if="props.isSyncing" class="w-3.5 h-3.5 animate-spin text-indigo-400" />
             <RefreshCw v-else class="w-3.5 h-3.5" />
           </button>
+
+          <!-- Auto-Sync Live Status Pill -->
+          <div
+            class="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/40 border border-emerald-800/40 text-[10px] text-emerald-400 font-medium"
+            title="Auto-sync active: new AI responses and conversation turns synchronize automatically without pressing sync"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Auto-Sync</span>
+          </div>
         </div>
       </div>
 

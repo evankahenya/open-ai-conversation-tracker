@@ -115,17 +115,27 @@ const formatTime = (iso?: string) => {
       </button>
 
       <!-- Sync from OpenAI Button (Genuine SDK sync) -->
-      <button
-        id="sidebar-sync-btn"
-        @click="emit('sync-history')"
-        :disabled="props.isSyncing"
-        class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-indigo-950/40 hover:bg-indigo-900/50 active:bg-indigo-900/70 border border-indigo-700/50 text-indigo-200 text-xs font-medium transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Fetch earlier conversation items directly from OpenAI API using official SDK"
-      >
-        <Loader2 v-if="props.isSyncing" class="w-3.5 h-3.5 animate-spin text-indigo-400" />
-        <RefreshCw v-else class="w-3.5 h-3.5 text-indigo-400" />
-        <span>{{ props.isSyncing ? 'Syncing from OpenAI...' : 'Sync Earlier from OpenAI' }}</span>
-      </button>
+      <div class="space-y-1.5">
+        <button
+          id="sidebar-sync-btn"
+          @click="emit('sync-history')"
+          :disabled="props.isSyncing"
+          class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-indigo-950/40 hover:bg-indigo-900/50 active:bg-indigo-900/70 border border-indigo-700/50 text-indigo-200 text-xs font-medium transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Manually force sync conversation items directly from OpenAI API (auto-sync is active in background)"
+        >
+          <Loader2 v-if="props.isSyncing" class="w-3.5 h-3.5 animate-spin text-indigo-400" />
+          <RefreshCw v-else class="w-3.5 h-3.5 text-indigo-400" />
+          <span>{{ props.isSyncing ? 'Syncing from OpenAI...' : 'Sync Earlier from OpenAI' }}</span>
+        </button>
+
+        <div class="flex items-center justify-between px-1 text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5 text-emerald-400 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Auto-sync active
+          </span>
+          <span class="text-[10px] text-slate-500">Live polling</span>
+        </div>
+      </div>
 
       <!-- Manually Enter Conversation ID Panel -->
       <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
