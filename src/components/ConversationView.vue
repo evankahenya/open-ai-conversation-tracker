@@ -79,7 +79,7 @@ onMounted(() => {
         <div class="max-w-md space-y-1.5">
           <h3 class="text-sm font-semibold text-slate-200">Zero Dummy Data — Ready for Real OpenAI Conversation</h3>
           <p class="text-xs text-slate-400">
-            No dummy or simulated events are loaded. Auto-sync is active in the background. You can also send a new question below to stream live with the OpenAI Responses API.
+            No dummy or simulated events are loaded. Click the <span class="text-indigo-300 font-medium">Sync</span> button next to the chat input to pull earlier conversation turns, or ask a question below to stream live with the OpenAI Responses API.
           </p>
         </div>
       </div>

@@ -14,7 +14,6 @@ import {
   createRealOpenAIConversation,
 } from './server/openaiService';
 import { startWatcher, triggerSampleCapture, getWatcherStatus } from './server/watcher';
-import { startAutoSyncWorker } from './server/autoSync';
 import { AssistantMessageEvent, UserMessageEvent, ConversationEvent } from './server/types';
 
 const PORT = 3000;
@@ -339,9 +338,6 @@ async function startServer() {
 
   // Start background screenshot watcher process
   startWatcher();
-
-  // Start background auto-sync worker to automatically sync new AI responses from OpenAI
-  startAutoSyncWorker(3000);
 
   // Vite middleware setup (development vs production)
   if (process.env.NODE_ENV !== 'production') {

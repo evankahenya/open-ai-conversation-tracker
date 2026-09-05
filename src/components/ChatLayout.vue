@@ -147,8 +147,10 @@ const closeImageViewer = () => {
       <!-- Message Composer -->
       <MessageComposer
         :is-generating="props.isGenerating"
+        :is-syncing="props.isSyncing"
         :disabled="props.connectionStatus === 'disconnected'"
         @send="(text) => emit('send-message', text)"
+        @sync="emit('sync-history')"
       />
     </main>
 

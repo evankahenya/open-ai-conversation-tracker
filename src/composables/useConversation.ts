@@ -60,9 +60,6 @@ export function useConversation(onContentChange?: () => void) {
         (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       );
 
-      // Start client-side auto-sync check
-      startClientAutoSync();
-
       onContentChange?.();
     } catch (err: any) {
       console.error('[Failed to load conversation]:', err);
@@ -106,19 +103,6 @@ export function useConversation(onContentChange?: () => void) {
     if (!data) return;
 
     switch (eventType) {
-      case 'conversation_synced': {
-        // Automatic background sync detected a new AI response on OpenAI
-        fetchMessages().then((history) => {
-          if (history?.events) {
-            messages.value = [...history.events].sort(
-              (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-            );
-            onContentChange?.();
-          }
-        });
-        break;
-      }
-
       case 'screenshot': {
         // A new screenshot was observed by the watcher!
         // Prepare streaming analysis card
@@ -295,42 +279,10 @@ export function useConversation(onContentChange?: () => void) {
 
   const isSyncing = ref(false);
 
-  // Client-side auto-sync heartbeat (runs silently in background)
-  let clientAutoSyncTimer: any = null;
-  const startClientAutoSync = () => {
-    if (clientAutoSyncTimer) clearInterval(clientAutoSyncTimer);
-    clientAutoSyncTimer = setInterval(async () => {
-      // Don't auto-sync while actively capturing or streaming
-      if (isGenerating.value || isCapturing.value || !conversationId.value || conversationId.value === 'conv_abc123') {
-        return;
-      }
-      try {
-        const history = await fetchMessages();
-        if (history?.events) {
-          const incomingCount = history.events.length;
-          const currentCount = messages.value.length;
-          const incomingLastId = history.events[history.events.length - 1]?.id;
-          const currentLastId = messages.value[messages.value.length - 1]?.id;
-
-          if (incomingCount !== currentCount || incomingLastId !== currentLastId) {
-            messages.value = [...history.events].sort(
-              (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-            );
-            onContentChange?.();
-          }
-        }
-      } catch {
-        // Silently ignore background polling errors
-      }
-    }, 4000);
-  };
-
-  const syncHistory = async (targetId?: string, silent = false) => {
-    if (isSyncing.value && !silent) return;
-    if (!silent) {
-      isSyncing.value = true;
-      error.value = null;
-    }
+  const syncHistory = async (targetId?: string) => {
+    if (isSyncing.value) return;
+    isSyncing.value = true;
+    error.value = null;
     try {
       const res = await syncEarlierConversation(targetId);
       if (res?.events) {
@@ -341,14 +293,10 @@ export function useConversation(onContentChange?: () => void) {
       }
       await loadInitialData();
     } catch (err: any) {
-      if (!silent) {
-        console.error('[Failed to sync earlier conversation]:', err);
-        error.value = err.message || 'Failed to sync earlier conversation from OpenAI';
-      }
+      console.error('[Failed to sync earlier conversation]:', err);
+      error.value = err.message || 'Failed to sync earlier conversation from OpenAI';
     } finally {
-      if (!silent) {
-        isSyncing.value = false;
-      }
+      isSyncing.value = false;
     }
   };
 
